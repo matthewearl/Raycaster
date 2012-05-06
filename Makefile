@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 CC=gcc
-CFLAGS=-Wall -O3 -ffast-math -funroll-loops -march=i686 -malign-double -fstrict-aliasing -ggdb
+CFLAGS=-Wall -O3 -ffast-math -funroll-loops -malign-double -fstrict-aliasing -ggdb
 #CFLAGS=-ggdb -Wall -pg
 #CFLAGS=-g
 
