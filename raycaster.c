@@ -32,35 +32,47 @@
 
 typedef struct fedge_s
 {
-	int vertrefs[2];
-	int leftplatref,rightplatref;
+	int32_t vertrefs[2];
+	int32_t leftplatref,rightplatref;
 } fedge_t;
 
 typedef struct fvert_s
 {
 	vector2d_t pos;
-	int numedges;
-	int *edgerefs;
+	int32_t numedges;
+	uint32_t dummy;
 } fvert_t;
+
+typedef struct ivert_s
+{
+	fvert_t f;
+	int32_t *edgerefs;
+} ivert_t;
 
 typedef struct fplatform_s
 {
 	float ceilheight,floorheight;
-	int numedges;
-	int *edgerefs;
+	int32_t numedges;
+	uint32_t dummy;
 } fplatform_t;
+
+typedef struct iplatform_s
+{
+	fplatform_t f;
+	int32_t *edgerefs;
+} iplatform_t;
 
 typedef struct levelfile_s
 {
-	int numedges;
-	fedge_t *edges;
+	int32_t numedges;
+	uint32_t dummy1;
 	
-	int numplatforms;
-	fplatform_t *platforms;
+	int32_t numplatforms;
+	uint32_t dummy2;
 	fplatform_t infplatform;
 	
-	int numverts;
-	fvert_t *verts;
+	int32_t numverts;
+	uint32_t dummy3;
 	vector2d_t size;
 } levelfile_t;
 
@@ -246,30 +258,30 @@ convertedge ( raycaster_t *r, level_t *l, fedge_t *fe, edge_t *e )
 }
 
 void
-convertvert ( raycaster_t *r, level_t *l, fvert_t *fv, vert_t *v )
+convertvert ( raycaster_t *r, level_t *l, ivert_t *iv, vert_t *v )
 {
 	int i;
-	vectorcopy(&v->pos,&fv->pos);
-	v->numedges = fv->numedges;
+	vectorcopy(&v->pos,&iv->f.pos);
+	v->numedges = iv->f.numedges;
 	
-	v->edges = (edge_t**)malloc(sizeof(edge_t*)*fv->numedges);
+	v->edges = (edge_t**)malloc(sizeof(edge_t*)*iv->f.numedges);
 	for(i=0;i<v->numedges;i++)
-		v->edges[i] = &l->edges[fv->edgerefs[i]];
+		v->edges[i] = &l->edges[iv->edgerefs[i]];
 }
 
 void
-convertplatform ( raycaster_t *r, level_t *l, fplatform_t *fp, platform_t *p )
+convertplatform ( raycaster_t *r, level_t *l, iplatform_t *ip, platform_t *p )
 {
 	int i;
 	
-	p->ceilheight = fp->ceilheight;
-	p->floorheight = fp->floorheight;
+	p->ceilheight = ip->f.ceilheight;
+	p->floorheight = ip->f.floorheight;
 
-	p->numedges = fp->numedges;
-	p->edges = (edge_t**)malloc(sizeof(edge_t*)*fp->numedges);
-	for(i=0;i<fp->numedges;i++)
+	p->numedges = ip->f.numedges;
+	p->edges = (edge_t**)malloc(sizeof(edge_t*)*ip->f.numedges);
+	for(i=0;i<ip->f.numedges;i++)
 	{
-		p->edges[i] = &l->edges[fp->edgerefs[i]];
+		p->edges[i] = &l->edges[ip->edgerefs[i]];
 	}
 	p->texture = texturefrompath(r,"floor.tga");
 	p->allocatedsprites = 4;
@@ -316,20 +328,6 @@ optimiseplatform ( raycaster_t *r, level_t *l, platform_t *p)
 		p->ceilheight = lowest-1.0f;
 }
 
-void
-freelevelfile ( raycaster_t *r, levelfile_t *lf )
-{
-	int i;
-	for(i=0;i<lf->numplatforms;i++)
-		free(lf->platforms[i].edgerefs);
-	free(lf->platforms);
-	free(lf->infplatform.edgerefs);
-	for(i=0;i<lf->numverts;i++)
-		free(lf->verts[i].edgerefs);
-	free(lf->verts);
-	free(lf->edges);
-}
-
 int
 loadlevel ( raycaster_t *r, char *filename )
 {
@@ -337,6 +335,10 @@ loadlevel ( raycaster_t *r, char *filename )
 	levelfile_t lf;
 	level_t *l=&r->level;
 	int i;
+	fedge_t *fedges;
+	iplatform_t *iplatforms;
+	iplatform_t iinfplatform;
+	ivert_t *iverts;
 	
 	f=fopen(filename,"rb");
 	if(!f)
@@ -347,32 +349,33 @@ loadlevel ( raycaster_t *r, char *filename )
 	
 	fread(&lf,sizeof(levelfile_t),1,f);
 
-	lf.edges = (fedge_t*)malloc(sizeof(fedge_t)*lf.numedges);
+	fedges = (fedge_t*)malloc(sizeof(fedge_t)*lf.numedges);
 	for(i=0;i<lf.numedges;i++)
 	{	
-		fread(&lf.edges[i],sizeof(fedge_t),1,f);
+		fread(&fedges[i],sizeof(fedge_t),1,f);
 	}
 	
-	lf.platforms = (fplatform_t*)malloc(sizeof(fplatform_t)*lf.numplatforms);
+	iplatforms = (iplatform_t*)malloc(sizeof(iplatform_t)*lf.numplatforms);
 	for(i=0;i<lf.numplatforms;i++)
 	{	
-		fread(&lf.platforms[i],sizeof(fplatform_t),1,f);
-		lf.platforms[i].edgerefs = 
-			(int*)malloc(sizeof(int)*lf.platforms[i].numedges);
-		fread(lf.platforms[i].edgerefs,sizeof(int),lf.platforms[i].numedges,f);
+		fread(&iplatforms[i].f,sizeof(fplatform_t),1,f);
+		iplatforms[i].edgerefs = 
+			(int*)malloc(sizeof(int)*iplatforms[i].f.numedges);
+		fread(iplatforms[i].edgerefs,sizeof(int),iplatforms[i].f.numedges,f);
 	}
 
-	lf.infplatform.edgerefs = 
-		(int*)malloc(sizeof(int)*lf.infplatform.numedges);
-	fread(lf.infplatform.edgerefs,sizeof(int),lf.infplatform.numedges,f);
+	iinfplatform.f = lf.infplatform;
+	iinfplatform.edgerefs = 
+		(int*)malloc(sizeof(int)*iinfplatform.f.numedges);
+	fread(iinfplatform.edgerefs,sizeof(int),iinfplatform.f.numedges,f);
 	
-	lf.verts = (fvert_t*)malloc(sizeof(fvert_t)*lf.numverts);
+	iverts = (ivert_t*)malloc(sizeof(ivert_t)*lf.numverts);
 	for(i=0;i<lf.numverts;i++)
 	{	
-		fread(&lf.verts[i],sizeof(fvert_t),1,f);
-		lf.verts[i].edgerefs = 
-			(int*)malloc(sizeof(int)*lf.verts[i].numedges);
-		fread(lf.verts[i].edgerefs,sizeof(int),lf.verts[i].numedges,f);
+		fread(&iverts[i].f,sizeof(fvert_t),1,f);
+		iverts[i].edgerefs = 
+			(int*)malloc(sizeof(int)*iverts[i].f.numedges);
+		fread(iverts[i].edgerefs,sizeof(int),iverts[i].f.numedges,f);
 	}
 	
 	fclose(f);
@@ -387,18 +390,28 @@ loadlevel ( raycaster_t *r, char *filename )
 	l->verts = (vert_t*)malloc(sizeof(vert_t)*l->numverts);
 
 	for(i=0;i<lf.numverts;i++)
-		convertvert(r,l,&lf.verts[i],&l->verts[i]);	
+		convertvert(r,l,&iverts[i],&l->verts[i]);	
 	for(i=0;i<lf.numedges;i++)
-		convertedge(r,l,&lf.edges[i],&l->edges[i]);
+		convertedge(r,l,&fedges[i],&l->edges[i]);
 	for(i=0;i<lf.numplatforms;i++)
-		convertplatform(r,l,&lf.platforms[i],&l->platforms[i]);	
-	convertplatform(r,l,&lf.infplatform,&l->infplatform);
+		convertplatform(r,l,&iplatforms[i],&l->platforms[i]);	
+	convertplatform(r,l,&iinfplatform,&l->infplatform);
 
 	for(i=0;i<lf.numplatforms;i++)
 		optimiseplatform(r,l,&l->platforms[i]);	
 	optimiseplatform(r,l,&l->infplatform);
 	
-	freelevelfile(r,&lf);
+	/*
+	 * Cleanup.
+     */
+	for(i=0;i<lf.numplatforms;i++)
+		free(iplatforms[i].edgerefs);
+	free(iinfplatform.edgerefs);
+	free(iplatforms);
+	for(i=0;i<lf.numverts;i++)
+		free(iverts[i].edgerefs);
+	free(iverts);
+	free(fedges);
 
 	return 1;
 }
