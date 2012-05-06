@@ -2,7 +2,5 @@ h1. Raycaster
 
 A small raycaster I wrote in C using SDL. Features doom-style levels: Walls are vertical but do not otherwise have to be axially aligned and it's not possible to put rooms on top of each other. Unlike Doom, it does not feature lighting.
 
-h2. Video
-
-<iframe width="640" height="480" src="http://www.youtube.com/embed/iuuhSg8GiLg?rel=0" frameborder="0" allowfullscreen></iframe>
+"YouTube video.":http://youtu.be/iuuhSg8GiLg
 
