@@ -30,12 +30,20 @@
 #define SCREEN_WIDTH	640
 #define SCREEN_HEIGHT	480
 
+#define PACKED	__attribute__((packed))
+
 /* Edge structure, as stored in the file. */
 typedef struct fedge_s
 {
 	int32_t vertrefs[2];
 	int32_t leftplatref,rightplatref;
-} fedge_t;
+} PACKED fedge_t;
+
+/* Vector structure, as stored in the file. */
+typedef struct fvector2d_s
+{
+	float x,y;
+} PACKED fvector2d_t;
 
 /* Vertex structure, as stored in the file. */
 typedef struct fvert_s
@@ -43,7 +51,7 @@ typedef struct fvert_s
 	vector2d_t pos;
 	int32_t numedges;
 	uint32_t dummy;
-} fvert_t;
+} PACKED fvert_t;
 
 /* Platform structure, as stored in the file. */
 typedef struct fplatform_s
@@ -51,7 +59,7 @@ typedef struct fplatform_s
 	float ceilheight,floorheight;
 	int32_t numedges;
 	uint32_t dummy;
-} fplatform_t;
+} PACKED fplatform_t;
 
 /* Level structure, as stored in the file. */
 typedef struct levelfile_s
@@ -66,7 +74,7 @@ typedef struct levelfile_s
 	int32_t numverts;
 	uint32_t dummy3;
 	vector2d_t size;
-} levelfile_t;
+} PACKED levelfile_t;
 
 /* Intermediate vertex structure, used when loading the level. */
 typedef struct ivert_s
@@ -268,7 +276,8 @@ void
 convertvert ( raycaster_t *r, level_t *l, ivert_t *iv, vert_t *v )
 {
 	int i;
-	vectorcopy(&v->pos,&iv->f.pos);
+	v->pos.x = iv->f.pos.x;
+	v->pos.y = iv->f.pos.y;
 	v->numedges = iv->f.numedges;
 	
 	v->edges = (edge_t**)malloc(sizeof(edge_t*)*iv->f.numedges);
@@ -301,8 +310,16 @@ void
 optimiseplatform ( raycaster_t *r, level_t *l, platform_t *p)
 {
 	int i,changeceil=1,changefloor=1,firstfloor=1,firstceil=1;
-	platform_t *n;
+	platform_t *n; /* Neighbouring platform. */
 	float highest=0.0f,lowest=0.0f;
+
+	/* If the platform's floor is higher than all its neighbours' ceilings then
+	 * set the platform's floor height to the maximum of its neighbours
+	 * ceilings. This is to minimise overdraw.
+	 *
+	 * Do similar if the platform's ceiling is lower than all of its
+	 * neighbours' floors.
+	 */
 	for(i=0;i<p->numedges;i++)
 	{
 		if(p->edges[i]->leftplat != p)
@@ -367,22 +384,22 @@ loadlevel ( raycaster_t *r, char *filename )
 	{	
 		fread(&iplatforms[i].f,sizeof(fplatform_t),1,f);
 		iplatforms[i].edgerefs = 
-			(int*)malloc(sizeof(int)*iplatforms[i].f.numedges);
-		fread(iplatforms[i].edgerefs,sizeof(int),iplatforms[i].f.numedges,f);
+			(int32_t*)malloc(sizeof(int32_t)*iplatforms[i].f.numedges);
+		fread(iplatforms[i].edgerefs,sizeof(int32_t),iplatforms[i].f.numedges,f);
 	}
 
 	iinfplatform.f = lf.infplatform;
 	iinfplatform.edgerefs = 
-		(int*)malloc(sizeof(int)*iinfplatform.f.numedges);
-	fread(iinfplatform.edgerefs,sizeof(int),iinfplatform.f.numedges,f);
+		(int32_t*)malloc(sizeof(int32_t)*iinfplatform.f.numedges);
+	fread(iinfplatform.edgerefs,sizeof(int32_t),iinfplatform.f.numedges,f);
 	
 	iverts = (ivert_t*)malloc(sizeof(ivert_t)*lf.numverts);
 	for(i=0;i<lf.numverts;i++)
 	{	
 		fread(&iverts[i].f,sizeof(fvert_t),1,f);
 		iverts[i].edgerefs = 
-			(int*)malloc(sizeof(int)*iverts[i].f.numedges);
-		fread(iverts[i].edgerefs,sizeof(int),iverts[i].f.numedges,f);
+			(int32_t*)malloc(sizeof(int32_t)*iverts[i].f.numedges);
+		fread(iverts[i].edgerefs,sizeof(int32_t),iverts[i].f.numedges,f);
 	}
 	
 	fclose(f);
@@ -390,7 +407,8 @@ loadlevel ( raycaster_t *r, char *filename )
 	l->numedges = lf.numedges;
 	l->numplatforms = lf.numplatforms;
 	l->numverts = lf.numverts;
-	vectorcopy(&l->size,&lf.size);
+	l->size.x = lf.size.x;
+	l->size.y = lf.size.y;
 	
 	l->edges = (edge_t*)malloc(sizeof(edge_t)*l->numedges);
 	l->platforms = (platform_t*)malloc(sizeof(platform_t)*l->numplatforms);
@@ -1809,7 +1827,7 @@ main ( int argc, char **argv )
 	raycaster_t r;
 	world_t w;
 
-    printf("Copyright Notice: This program is licensed under the GNU General Public License\nSee COPYING for details\n\n");
+	printf("Copyright Notice: This program is licensed under the GNU General Public License\nSee COPYING for details\n\n");
 
 	if(argc < 2)
 	{
