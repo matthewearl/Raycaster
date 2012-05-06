@@ -40,4 +40,4 @@ world.o: world.c raycaster.h world.h vector.h
 	$(CC) $(CFLAGS) -c world.c -o world.o
 
 clean:
-	-rm *.o raycaster
+	-rm -f *.o raycaster gmon.out
