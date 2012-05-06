@@ -30,12 +30,14 @@
 #define SCREEN_WIDTH	640
 #define SCREEN_HEIGHT	480
 
+/* Edge structure, as stored in the file. */
 typedef struct fedge_s
 {
 	int32_t vertrefs[2];
 	int32_t leftplatref,rightplatref;
 } fedge_t;
 
+/* Vertex structure, as stored in the file. */
 typedef struct fvert_s
 {
 	vector2d_t pos;
@@ -43,12 +45,7 @@ typedef struct fvert_s
 	uint32_t dummy;
 } fvert_t;
 
-typedef struct ivert_s
-{
-	fvert_t f;
-	int32_t *edgerefs;
-} ivert_t;
-
+/* Platform structure, as stored in the file. */
 typedef struct fplatform_s
 {
 	float ceilheight,floorheight;
@@ -56,12 +53,7 @@ typedef struct fplatform_s
 	uint32_t dummy;
 } fplatform_t;
 
-typedef struct iplatform_s
-{
-	fplatform_t f;
-	int32_t *edgerefs;
-} iplatform_t;
-
+/* Level structure, as stored in the file. */
 typedef struct levelfile_s
 {
 	int32_t numedges;
@@ -75,6 +67,21 @@ typedef struct levelfile_s
 	uint32_t dummy3;
 	vector2d_t size;
 } levelfile_t;
+
+/* Intermediate vertex structure, used when loading the level. */
+typedef struct ivert_s
+{
+	fvert_t f;
+	int32_t *edgerefs;
+} ivert_t;
+
+/* Intermediate platform structure, used when loading the level. */
+typedef struct iplatform_s
+{
+	fplatform_t f;
+	int32_t *edgerefs;
+} iplatform_t;
+
 
 #define FINAL_FLOOR		1
 #define FINAL_CEILING		2
