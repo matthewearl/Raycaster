@@ -134,10 +134,10 @@ loadtexture ( texture_t *t, raycaster_t *r, char *filename )
 	int x,y;
 	bitmap_t b;
 
-	strcpy(t->path, filename);
+	snprintf(t->path, sizeof(t->path), "textures/%s", filename);
 	t->pixels = NULL;
 	
-	if(!loadTGA(filename,&b))
+	if(!loadTGA(t->path,&b))
 		return 0;
 	t->width = b.width;
 	t->height = b.height;
@@ -153,7 +153,7 @@ loadtexture ( texture_t *t, raycaster_t *r, char *filename )
 	
 	if(!setlogdimensions(t))
 	{
-		printf("Bad texture size in %s, %ix%i\n", filename,t->width,t->height);
+		printf("Bad texture size in %s, %ix%i\n", t->path,t->width,t->height);
 		freeTGA(&b);
 		return 0;
 	}
