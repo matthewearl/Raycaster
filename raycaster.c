@@ -75,7 +75,7 @@ typedef struct levelfile_s
 /**************************************************************/
 
 int
-log2 ( int num, int *log )
+intlog2 ( int num, int *log )
 {
 	int i,n;
 
@@ -93,9 +93,9 @@ log2 ( int num, int *log )
 int
 setlogdimensions ( texture_t *t )
 {
-	if(!log2(t->width,&t->log2width))
+	if(!intlog2(t->width,&t->log2width))
 		return 0;
-	if(!log2(t->height,&t->log2height))
+	if(!intlog2(t->height,&t->log2height))
 		return 0;
 	return 1;
 }
