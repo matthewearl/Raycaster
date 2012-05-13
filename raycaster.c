@@ -95,9 +95,9 @@ typedef struct iplatform_s
 #define FINAL_CEILING		2
 
 #define PRECISION_BITS			8
-#define DOUBLE_PRECISION_BITS		16
+#define DOUBLE_PRECISION_BITS		(2*PRECISION_BITS)
 #define PRECISION_PRODUCT		256.0f		/* 2^PRECISION_BITS */
-#define PRECISION_PRODUCT_SQUARE	65536.0f 	/* 2^DOUBLE_PRECISION_BITS */
+#define PRECISION_PRODUCT_SQUARE	(PRECISION_PRODUCT*PRECISION_PRODUCT) 	/* 2^DOUBLE_PRECISION_BITS */
 
 /**************************************************************/
 
