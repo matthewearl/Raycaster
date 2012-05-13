@@ -1002,7 +1002,7 @@ drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2,
 	else
 		p2 = p2b;
 
-	tx = ((int)in->texoffset)%(t->widthmask);
+	tx = ((int)in->texoffset)&(t->widthmask);
 	i = ((h2-h1)<<PRECISION_BITS)/(p2b-p1b);
 	ty = ((h1<<PRECISION_BITS)+(((p1-p1b)*(h2-h1))<<PRECISION_BITS)/
 			(p2b-p1b))&(t->heightmasksmallshift);
