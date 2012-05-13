@@ -589,6 +589,7 @@ edgeintersect ( raycaster_t *r, platform_t *p, vector2d_t *dir,
 	vector2d_t poi,origin;
 	int i,j,first,done;
 	float dist,mindist=0.0f,texoffset;
+	platform_t *nextplatform;
 	intersection_t in;
 	edge_t *e;
 	
@@ -600,25 +601,31 @@ edgeintersect ( raycaster_t *r, platform_t *p, vector2d_t *dir,
 	{
 		e=p->edges[i];
 		
-		if(!intersection)
-		{
-			/* skip this edge if we've already intersected with it */
-			for(j=0;j<r->numintersections;j++)
-			{
-				if(r->intersections[j].edge==e)
-					break;
-			}
-			if(j<r->numintersections)
-			{
-				continue;
-			}
-		}
-		
 		if(!linelineintersect(&origin,dir,&e->verts[0]->pos,
 					&e->verts[1]->pos,&e->normal,&e->line,
 					&dist,&texoffset,&poi))
 		{
 			continue;
+		}
+
+		// Determine what the next platform is, and check that it's in the forward
+		// direction.
+		if(e->leftplat != p)
+		{
+			if (dotproduct(&e->normal, dir) > 0.0f)
+				continue;
+			nextplatform = e->leftplat;
+		}
+		else if(e->rightplat != p)
+		{
+			if (dotproduct(&e->normal, dir) < 0.0f)
+				continue;
+			nextplatform = e->rightplat;
+		}
+		else
+		{
+			printf("edgeintersect() problem\n");
+			nextplatform = NULL;
 		}
 
 		if(first || dist < mindist)
@@ -633,15 +640,9 @@ edgeintersect ( raycaster_t *r, platform_t *p, vector2d_t *dir,
 		vectorcopy(&in.pos,&poi);
 		in.distance = dist + prevdist;
 		in.edge = e;
-
 		in.final = 0;
+		in.platform = nextplatform;
 		
-		if(e->leftplat != p)
-			in.platform = e->leftplat;
-		else if(e->rightplat != p)
-			in.platform = e->rightplat;
-		else
-			printf("edgeintersect() problem\n");
 		in.texoffset = texoffset;
 		done = 1;
 	}
