@@ -506,23 +506,10 @@ handleevents( raycaster_t *r, world_t *w, int *done )
 	}
 }
 
-intersection_t *
-addintersection ( raycaster_t *r, intersection_t *i )
-{
-	if(r->numintersections >= r->allocatedintersections)
-	{
-		r->allocatedintersections+=HUNK_INTERSECTIONS;
-		r->intersections = (intersection_t*)realloc(r->intersections,
-				sizeof(intersection_t)*r->allocatedintersections);
-	}
-	memcpy(&r->intersections[r->numintersections++],i,sizeof(intersection_t));
-	return &r->intersections[r->numintersections-1];
-}
-
 #define HUNK_SPRITES	4
 
 void
-addspritetolist ( raycaster_t *r, sprite_t **i, float mingrad, float maxgrad, int nobounds )
+addspritetolist ( raycaster_t *r, sprite_t **i, float mingrad, float maxgrad )
 {
 	if(!(*i)->renderflag)
 	{
@@ -539,7 +526,6 @@ addspritetolist ( raycaster_t *r, sprite_t **i, float mingrad, float maxgrad, in
 	
 	(*i)->mingrad = mingrad;
 	(*i)->maxgrad = maxgrad;
-	(*i)->nobounds = nobounds;
 	
 	return;
 }
@@ -650,11 +636,6 @@ edgeintersect ( raycaster_t *r, platform_t *p, vector2d_t *dir,
 	{
 		printf("No intersection!\n");
 		return NULL;
-	}
-	if(!intersection)
-	{	
-		addintersection(r,&in);
-		return &r->intersections[r->numintersections-1];
 	}
 	memcpy(intersection,&in,sizeof(intersection_t));
 	return intersection;
@@ -782,114 +763,6 @@ checkdone( int first, float high, float low, intersection_t *hi,
 		return 1;
 	}
 	return 0;
-}
-
-/* initialtrace
- *
- * Trace a line through the world and return a list of intersections.
- */
-void
-initialtrace( raycaster_t *r, vector2d_t *dir )
-{
-	float highestgradient=0.0f,lowestgradient=0.0f;
-	int first,doneceil,donefloor,i,prevdist;
-	intersection_t *current,*highint,*lowint;
-	platform_t *prevplat,*ceilplat,*floorplat;
-	sprite_t *s;	
-	
-	r->numsprites = 0;
-	r->numintersections = 0;
-	prevplat = r->currentplatform;
-	first = 1;
-	highint=lowint=NULL;
-	prevdist = 0.0f;
-	current = edgeintersect(r,r->currentplatform,dir,&r->viewpos,0.0f,NULL,NULL);
-	while(0<1)
-	{
-		if(!current)
-			return;
-		doneceil = donefloor = 0;
-		if(prevplat->ceilheight < current->platform->ceilheight)
-			ceilplat = prevplat;
-		else
-			ceilplat = current->platform;
-
-		if(prevplat->floorheight > current->platform->floorheight)
-			floorplat = prevplat;
-		else
-			floorplat = current->platform;
-		
-		/* if platform contains sprites, declare they should be 
-		 * rendered, but with the specified bounds.
-		 */
-		for(i=0;i<prevplat->numsprites;i++)
-		{
-			vector2d_t poi;
-			
-			s=prevplat->sprites[i];
-			/* determine if the sprite is visible in this platform and
-			 * if it in this part of the platform
-			 */
-			if(linelineintersect(&r->viewpos,dir,&s->verts[0],&s->verts[1],
-				&s->normal,&s->line,&s->dist,&s->texoffset,&poi) &&
-				s->dist > prevdist && s->dist < current->distance)
-			{
-				addspritetolist ( r, &prevplat->sprites[i], 
-						highestgradient,lowestgradient,first);
-			}
-		}
-		/* arrangement ensures previous platform has precedence over next platform */	
-		if(ceilplat == prevplat)
-		{
-			doneceil = 1;
-			checkceiling(r,ceilplat,(ceilplat->ceilheight-r->eyelevel)/current->distance,
-					&lowestgradient,&lowint,current,first);
-			if(checkdone(first,highestgradient,lowestgradient,highint,lowint))
-				return;
-		}
-		
-		if(floorplat == prevplat)
-		{
-			donefloor = 1;
-			checkfloor(r,floorplat,(floorplat->floorheight-r->eyelevel)/current->distance,
-					&highestgradient,&highint,current,first);
-			if(checkdone(first,highestgradient,lowestgradient,highint,lowint))
-				return;
-		}
-		
-		if(!doneceil)
-		{
-			checkceiling(r,ceilplat,(ceilplat->ceilheight-r->eyelevel)/current->distance,
-					&lowestgradient,&lowint,current,first);
-			if(checkdone(first&&!donefloor,highestgradient,lowestgradient,highint,lowint))
-				return;
-		}
-		if(!donefloor)
-		{
-			checkfloor(r,floorplat,(floorplat->floorheight-r->eyelevel)/current->distance,
-					&highestgradient,&highint,current,first);
-			if(checkdone(0,highestgradient,lowestgradient,highint,lowint))
-				return;
-		}
-		
-		if(current->platform == &r->level.infplatform)
-		{
-			printf("infplatfloorheight = %f prevplatceilheight = %f\n",
-					current->platform->floorheight, prevplat->ceilheight);
-			printf("map not closed hg=%f lg=%f\n",highestgradient,lowestgradient);
-			sleep(5);
-			
-			return;
-		}
-		
-		prevplat = current->platform;
-		prevdist = current->distance;
-		current = edgeintersect(r,prevplat,dir,&current->pos,current->distance,NULL,NULL);
-		
-		first = 0;
-	}
-	printf("We went into infinity\n");
-	return;
 }
 
 #define SCREEN_DISTANCE	1.0f
@@ -1062,85 +935,6 @@ static float clamp(float v, float low, float high)
 	return v < low ? low : (v > high ? high : v);
 }
 
-static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
-{
-	int i;
-	intersection_t *in;
-	float floorgrad, ceilgrad;
-	float prevfloorgrad, prevceilgrad;
-	float maxfloorgrad, minceilgrad;
-	float g1,g2;
-	platform_t *prevplat;
-	
-	/* Step through the intersections rendering the ceiling and the floor
-     * from near to far. Keep track of the highest floor gradient and lowest
-     * ceiling gradient rendered so far and use this to prevent drawing over
-     * the nearer surfaces.
-     */
-
-	maxfloorgrad = pixeltograd[SCREEN_HEIGHT-1];    /* Highest floor gradient so far. */
-	minceilgrad = pixeltograd[0];                   /* Lowest ceiling gradient so far. */
-
-	prevfloorgrad = -INFINITY;
-	prevceilgrad = +INFINITY;
-
-	prevplat = r->currentplatform;
-
-	/* Go through the edges our view intersects with,
-	 * nearest to farthest.
-	 */
-	for(i=0;i<r->numintersections && maxfloorgrad < minceilgrad;i++)
-	{
-		in = &r->intersections[i];
-
-		/* Draw floor from prev platform to current platform. */
-		floorgrad = (prevplat->floorheight - r->eyelevel) / in->distance;
-		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
-		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
-		if (g2 < g1)
-		{
-			drawfloor(r, prevplat, prevplat->floorheight - r->eyelevel, dir, g1, g2, x);
-			maxfloorgrad = g1;
-		}
-		prevfloorgrad = floorgrad;
-
-		/* Draw ceiling from prev platform to current platform. */
-		ceilgrad = (prevplat->ceilheight - r->eyelevel) / in->distance;
-		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
-		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
-		if (g2 < g1)
-		{
-			drawfloor(r, prevplat, prevplat->ceilheight - r->eyelevel, dir, g1, g2, x);
-			minceilgrad = g2;
-		}
-		prevceilgrad = ceilgrad;
-
-		/* Draw wall from prev floor to current floor. */
-		floorgrad = (in->platform->floorheight - r->eyelevel) / in->distance;
-		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
-		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
-		if (g2 < g1)
-		{
-			drawwall(r, in, g1, g2, x);
-			maxfloorgrad = g1;
-		}
-		prevfloorgrad = floorgrad;
-
-		/* Draw wall from prev ceiling to current ceiling. */
-		ceilgrad = (in->platform->ceilheight - r->eyelevel) / in->distance;
-		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
-		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
-		if (g2 < g1)
-		{
-			drawwall(r, in, g1, g2, x);
-			minceilgrad = g2;
-		}
-		prevceilgrad = ceilgrad;
-
-		prevplat = in->platform;
-	}
-}
-
 void
 drawsprite ( raycaster_t *r, sprite_t *s, vector2d_t *dir, int x )
 {
@@ -1156,7 +950,7 @@ drawsprite ( raycaster_t *r, sprite_t *s, vector2d_t *dir, int x )
 	p1b = gradtopixel(sprmaxgrad);
 	p2b = gradtopixel(sprmingrad);
 	
-	if(s->nobounds || sprmingrad > s->mingrad)
+	if(sprmingrad > s->mingrad)
 	{
 		mingr = sprmingrad;
 		p2 = p2b;
@@ -1166,7 +960,7 @@ drawsprite ( raycaster_t *r, sprite_t *s, vector2d_t *dir, int x )
 		p2 = gradtopixel(mingr);
 	}
 	
-	if(s->nobounds || sprmaxgrad < s->maxgrad)
+	if(sprmaxgrad < s->maxgrad)
 	{
 		maxgr = sprmaxgrad;
 		p1 = p1b;
@@ -1221,10 +1015,104 @@ drawsprites( raycaster_t *r, vector2d_t *dir, int x )
 void
 drawcolumn ( raycaster_t *r, vector2d_t *dir, int x )
 {
-	initialtrace(r,dir);
-	drawwallsandfloor(r, dir, x);
+	int i;
+	intersection_t in;
+	float floorgrad, ceilgrad;
+	float prevfloorgrad, prevceilgrad;
+	float maxfloorgrad, minceilgrad;
+	float g1,g2;
+	float prevdist;
+	platform_t *prevplat;
+	sprite_t *s;	
+	vector2d_t poi;
+	
+	/* Step through the intersections rendering the ceiling and the floor
+     * from near to far. Keep track of the highest floor gradient and lowest
+     * ceiling gradient rendered so far and use this to prevent drawing over
+     * the nearer surfaces.
+	 *
+     * When stepping through also add sprites to a list of sprites to be
+     * drawn. The sprites are rendered last.
+     */
+	maxfloorgrad = pixeltograd[SCREEN_HEIGHT-1];    /* Highest floor gradient so far. */
+	minceilgrad = pixeltograd[0];                   /* Lowest ceiling gradient so far. */
+
+	prevfloorgrad = -INFINITY; /* Straight down. */
+	prevceilgrad = +INFINITY;  /* Straight up. */
+
+	prevplat = r->currentplatform;
+	prevdist = 0.0f;
+
+	r->numsprites = 0;
+
+	if (edgeintersect(r, prevplat, dir, &r->viewpos, 0.0f, &in, NULL) == NULL)
+		return;
+	while(maxfloorgrad < minceilgrad)
+	{
+		/* Add sprites to list to be rendered. */
+		for(i=0;i<prevplat->numsprites;i++)
+		{
+			s=prevplat->sprites[i];
+			if(linelineintersect(&r->viewpos,dir,&s->verts[0],&s->verts[1],
+				&s->normal,&s->line,&s->dist,&s->texoffset,&poi) &&
+				s->dist > prevdist && s->dist < in.distance)
+			{
+				addspritetolist(r,&prevplat->sprites[i],maxfloorgrad,minceilgrad);
+			}
+		}
+
+		/* Draw floor from prev platform to current platform. */
+		floorgrad = (prevplat->floorheight - r->eyelevel) / in.distance;
+		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawfloor(r, prevplat, prevplat->floorheight - r->eyelevel, dir, g1, g2, x);
+			maxfloorgrad = g1;
+		}
+		prevfloorgrad = floorgrad;
+
+		/* Draw ceiling from prev platform to current platform. */
+		ceilgrad = (prevplat->ceilheight - r->eyelevel) / in.distance;
+		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawfloor(r, prevplat, prevplat->ceilheight - r->eyelevel, dir, g1, g2, x);
+			minceilgrad = g2;
+		}
+		prevceilgrad = ceilgrad;
+
+		/* Draw wall from prev floor to current floor. */
+		floorgrad = (in.platform->floorheight - r->eyelevel) / in.distance;
+		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawwall(r, &in, g1, g2, x);
+			maxfloorgrad = g1;
+		}
+		prevfloorgrad = floorgrad;
+
+		/* Draw wall from prev ceiling to current ceiling. */
+		ceilgrad = (in.platform->ceilheight - r->eyelevel) / in.distance;
+		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawwall(r, &in, g1, g2, x);
+			minceilgrad = g2;
+		}
+		prevceilgrad = ceilgrad;
+
+		prevplat = in.platform;
+		prevdist = in.distance;
+		if (maxfloorgrad < minceilgrad)
+			if (edgeintersect(r, prevplat, dir, &in.pos, prevdist, &in, NULL) == NULL)
+				return;
+	}
+
 	drawsprites(r,dir,x);
-	return;	
 }
 
 void
@@ -1519,12 +1407,11 @@ pickplatform ( raycaster_t *r, vector2d_t *v )
 int
 pointcanseepoint ( raycaster_t *r, vector2d_t *v1, float v1height, vector2d_t *v2, float v2height )
 {
-	intersection_t *in;
+	intersection_t in;
 	float tracedist,tracegrad,dist=0.0f,h;
 	platform_t *plat;
 	vector2d_t dir,pos,offs;
 
-	r->numintersections = 0;
 	vectorsubtract ( v2, v1, &dir );
 	
 	tracedist = vectorlength ( &dir );
@@ -1540,40 +1427,38 @@ pointcanseepoint ( raycaster_t *r, vector2d_t *v1, float v1height, vector2d_t *v
 	vectorscale(&dir,0.001f,&offs);
 	while ( 0 < 1)
 	{
-		in = edgeintersect ( r, plat, &dir, &pos, dist, NULL, NULL );
-		if(!in)
-			return 0;
-		if(in->distance > tracedist)
+		edgeintersect ( r, plat, &dir, &pos, dist, &in, NULL );
+		if(in.distance > tracedist)
 			return 1;
 		
 		/* Check if trace intersects with this edge's ceilings
 		 */
-		if( in->edge->rightplat->ceilheight < in->edge->leftplat->ceilheight )
+		if( in.edge->rightplat->ceilheight < in.edge->leftplat->ceilheight )
 		{
-			h = in->edge->rightplat->ceilheight;
+			h = in.edge->rightplat->ceilheight;
 		} else
 		{
-			h = in->edge->leftplat->ceilheight;
+			h = in.edge->leftplat->ceilheight;
 		}
-		if(((h-v1height)/in->distance) < tracegrad)
+		if(((h-v1height)/in.distance) < tracegrad)
 			return 0;
 		
 		/* Check if trace intersects with this edge's floors
 		 */
-		if( in->edge->rightplat->floorheight > in->edge->leftplat->floorheight )
+		if( in.edge->rightplat->floorheight > in.edge->leftplat->floorheight )
 		{
-			h = in->edge->rightplat->floorheight;
+			h = in.edge->rightplat->floorheight;
 		} else
 		{
-			h = in->edge->leftplat->floorheight;
+			h = in.edge->leftplat->floorheight;
 		}
-		if(((h-v1height)/in->distance) > tracegrad)
+		if(((h-v1height)/in.distance) > tracegrad)
 			return 0;
 		
-		dist = in->distance;
-/*		vectorcopy(&pos,&in->pos);*/
-		vectoradd(&offs,&in->pos,&pos);
-		plat = in->platform;
+		dist = in.distance;
+/*		vectorcopy(&pos,&in.pos);*/
+		vectoradd(&offs,&in.pos,&pos);
+		plat = in.platform;
 	}
 	
 	return 1;
@@ -1587,10 +1472,6 @@ initvariables ( raycaster_t *r )
 
 	r->currentplatform = pickplatform(r,&r->viewpos);
 	
-	r->numintersections = 0;
-	r->allocatedintersections = HUNK_INTERSECTIONS;
-	r->intersections = (intersection_t*)malloc(
-			sizeof(intersection_t)*r->allocatedintersections);
 	r->numsprites = 0;
 	r->allocatedsprites = HUNK_SPRITES;
 	r->spritelist = (sprite_t**)malloc(
@@ -1638,7 +1519,7 @@ addsprite ( raycaster_t *r, vector2d_t *verts, float height, float vdist,
 	platform_t *currentplat;
 	vector2d_t direction,pos;
 	sprite_t *sprite;
-	intersection_t *currentint;
+	intersection_t currentint;
 	float width,dist,highestfloor=0.0f,lowestceil=0.0f;
 	int first=1,i;
 	
@@ -1654,14 +1535,10 @@ addsprite ( raycaster_t *r, vector2d_t *verts, float height, float vdist,
 	vectorrot90(&sprite->line,&sprite->normal);
 	vectorcopy(&pos,&verts[0]);
 
-	r->numintersections = 0;
 	dist = 0.0f;
 	while(0<1)
 	{
-		currentint = edgeintersect(r,currentplat,&direction,&pos,dist,
-				NULL,NULL);
-		if(!currentint)
-			return NULL;
+		edgeintersect(r,currentplat,&direction,&pos,dist,&currentint,NULL);
 		for(i=0;i<currentplat->numsprites;i++)
 		{
 			if(currentplat->sprites[i] == sprite)
@@ -1677,7 +1554,7 @@ addsprite ( raycaster_t *r, vector2d_t *verts, float height, float vdist,
 			fprintf(stderr,"Sprite is on inf platform\n");
 			break;
 		}
-		if(currentint->distance > width)
+		if(currentint.distance > width)
 		{
 			/* The sprite ends in this platform */
 			break;
@@ -1693,9 +1570,9 @@ addsprite ( raycaster_t *r, vector2d_t *verts, float height, float vdist,
 			lowestceil = currentplat->ceilheight;
 			first = 0;
 		}
-		dist = currentint->distance;
-		currentplat = currentint->platform;
-		vectorcopy(&pos,&currentint->pos);
+		dist = currentint.distance;
+		currentplat = currentint.platform;
+		vectorcopy(&pos,&currentint.pos);
 	}
 	if(surface == SURFACE_FLOOR)
 	{

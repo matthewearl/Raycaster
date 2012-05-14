@@ -144,10 +144,6 @@ typedef struct raycaster_s
 	int cursorx,cursory;
 	int lastcursorx,lastcursory;
 
-	int numintersections;
-	int allocatedintersections;
-	intersection_t *intersections;
-
 	int numsprites;
 	int allocatedsprites;
 	sprite_t **spritelist;

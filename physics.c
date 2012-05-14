@@ -55,23 +55,21 @@ void
 moveplayer ( raycaster_t *r, entity_t *p, vector2d_t *origin,
 		vector2d_t *dir, float dist )
 {
-	intersection_t *in;
+	intersection_t in;
 	vector2d_t temp,origviewpos;
 	platform_t *prevplat=p->currentplatform,*prevprevplat=NULL;;
 	int headclip;
 	float pushextra;
 	
-	r->numintersections = 0;
-	in=edgeintersect(r,p->currentplatform,dir,origin,0.0f,NULL,NULL);
+	if(edgeintersect(r,p->currentplatform,dir,origin,0.0f,&in,NULL) == NULL)
+		return;
 	while(0<1)
 	{
-		if(!in)
-			return;
-		if(dist <= in->distance)
+		if(dist <= in.distance)
 			break;
 		prevprevplat=prevplat;
-		prevplat=in->platform;
-		if(in->platform == &r->level.infplatform)
+		prevplat=in.platform;
+		if(in.platform == &r->level.infplatform)
 			break;
 		
 		if(p->vpos + VIEW_HEIGHT >= prevplat->ceilheight)
@@ -79,7 +77,8 @@ moveplayer ( raycaster_t *r, entity_t *p, vector2d_t *origin,
 		if(prevplat->ceilheight - prevplat->floorheight < VIEW_HEIGHT)
 			break;
 		
-		in=edgeintersect(r,in->platform,dir,&in->pos,in->distance,NULL,NULL);
+		if(edgeintersect(r,in.platform,dir,&in.pos,in.distance,&in,NULL) == NULL)
+			return;
 	}
 	vectorcopy(&origviewpos,&p->pos);
 	vectorscale(dir,dist,&temp);
@@ -102,7 +101,7 @@ moveplayer ( raycaster_t *r, entity_t *p, vector2d_t *origin,
 		return;
 	}
 	
-	if(in->edge->rightplat == p->currentplatform)
+	if(in.edge->rightplat == p->currentplatform)
 	{
 		pushextra = -PUSH_EXTRA;
 	} else
@@ -110,8 +109,8 @@ moveplayer ( raycaster_t *r, entity_t *p, vector2d_t *origin,
 		pushextra = PUSH_EXTRA;
 	}
 	
-	vectorscale(&in->edge->normal,
-			pushextra+dotproduct(dir,&in->edge->normal),&temp);
+	vectorscale(&in.edge->normal,
+			pushextra+dotproduct(dir,&in.edge->normal),&temp);
 	vectorsubtract(dir,&temp,dir);
 	dist = vectorlength ( dir );
 	vectorscale( dir, 1.0f/dist, dir );
