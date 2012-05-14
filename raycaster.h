@@ -155,6 +155,9 @@ typedef struct raycaster_s
 
 	vector2d_t mousespeed;
 	int lastmousepolltime;
+
+	int lastfpsreporttime;
+	int framessincelastreport;
 } raycaster_t;
 
 #include "physics.h"

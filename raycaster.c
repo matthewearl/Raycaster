@@ -985,33 +985,42 @@ drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2,
 		int h1, int h2, int x )
 {
 	unsigned short *pixel,*tpixel;
-	int p1,p2,p1b,p2b,y,tx,ty,i;
+	int p1,p2,y,tx,ty,i;
 	texture_t *t=in->edge->texture;
 	
-	p1b = gradtopixel(g1);
-	p2b = gradtopixel(g2);
-	if(p2b == p1b)
+	p1 = gradtopixel(g1);
+	p2 = gradtopixel(g2);
+	if(p2 == p1)
 		return;
-	if(p1b < 0)
+
+	/* Clamp p1,p2 and the corresponding values of h1,h2 to the screen.
+	 */
+	if(p1 < 0)
 		p1 = 0;
-	else
-		p1 = p1b;
-	
-	if(p2b > SCREEN_HEIGHT-1)
+
+	if(p2 > SCREEN_HEIGHT-1)
 		p2 = SCREEN_HEIGHT-1;
-	else
-		p2 = p2b;
+
+	h1 = (int)(PRECISION_PRODUCT * (r->eyelevel + pixeltograd[p1] * in->distance));
+	h2 = (int)(PRECISION_PRODUCT * (r->eyelevel + pixeltograd[p2] * in->distance));
 
 	tx = ((int)in->texoffset)&(t->widthmask);
-	i = ((h2-h1)<<PRECISION_BITS)/(p2b-p1b);
-	ty = ((h1<<PRECISION_BITS)+(((p1-p1b)*(h2-h1))<<PRECISION_BITS)/
-			(p2b-p1b))&(t->heightmasksmallshift);
+	i = ((h2-h1)/(p2-p1)) & t->heightmasksmallshift;
+	ty = h1 & t->heightmasksmallshift;
 	pixel = ((unsigned short*)r->screen->pixels)+(p1)*SCREEN_WIDTH+(x);
 	tpixel = &t->pixels[tx<<t->log2height];
 	for(y=p1;y<p2;y++)
 	{
 		*pixel = tpixel[ty>>PRECISION_BITS];
-		ty = (ty+i)&(t->heightmasksmallshift);
+
+		/* Recalculate the vertical texture pixel `ty`. Most of the time do this by
+		 * adding on a constant but periodically do an expensive recalculation. This is
+		 * to mitigate acculated rounding errors in the increment value `i`.
+		 */
+		if ((y & 0xF) == 0)
+			ty = ((h2 * (y - p1) + h1 * (p2 - y)) / (p2 - p1)) & t->heightmasksmallshift;
+		else
+			ty = (ty+i)&(t->heightmasksmallshift);
 		pixel += SCREEN_WIDTH;
 	}
 }
@@ -1289,6 +1298,7 @@ drawscene ( raycaster_t *r )
 
 #define MIN_PHYSICS_FRAME_TIME	10	/* ms */
 #define MIN_MOUSE_POLL_TIME	0	/* ms */
+#define MIN_FPS_POLL_TIME 1000 /* ms */
 
 void
 perframe ( raycaster_t *r, world_t *w )
@@ -1316,6 +1326,17 @@ perframe ( raycaster_t *r, world_t *w )
 		r->lastmousepolltime = current;
 		r->lastcursorx = r->cursorx;
 		r->lastcursory = r->cursory;
+	}
+
+	if(current > r->lastfpsreporttime + MIN_FPS_POLL_TIME)
+	{
+		printf("FPS: %f\n", (float)(1000.0f * r->framessincelastreport)/(float)(current - r->lastfpsreporttime));
+
+		r->framessincelastreport = 0;
+		r->lastfpsreporttime = current;
+	} else
+	{
+		r->framessincelastreport++;
 	}
 }
 
@@ -1630,6 +1651,8 @@ initvariables ( raycaster_t *r )
 	r->mousespeed.x = r->mousespeed.y = 0.0f;
 	r->lastcursorx = r->lastcursory = -1;
 	r->lastmousepolltime = 0;
+	r->lastfpsreporttime = 0;
+	r->framessincelastreport = 0;
 
 	gradtopixelcoefficent = -(float)(SCREEN_WIDTH*HALF_SCREEN_HEIGHT)/((float)SCREEN_HEIGHT*TAN_FOV);
 	pixeltogradcoefficent = -(TAN_FOV*(float)SCREEN_HEIGHT/(float)SCREEN_WIDTH)/(float)HALF_SCREEN_HEIGHT;
