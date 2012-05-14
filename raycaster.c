@@ -587,7 +587,7 @@ edgeintersect ( raycaster_t *r, platform_t *p, vector2d_t *dir,
 		intersection_t *intersection, edge_t *ignoreedge)
 {
 	vector2d_t poi,origin;
-	int i,j,first,done;
+	int i,first,done;
 	float dist,mindist=0.0f,texoffset;
 	platform_t *nextplatform;
 	intersection_t in;
@@ -784,20 +784,11 @@ checkdone( int first, float high, float low, intersection_t *hi,
 	return 0;
 }
 
-enum
-{
-	CEILING_FIRST,
-	FLOOR_FIRST,
-	NONE_FIRST
-};
-
 /* initialtrace
  *
- * Trace a line through the world determining whether to draw the
- * floor or the ceiling first. Also flag the platforms which will be
- * the last floor and ceiling platforms to be drawn.
+ * Trace a line through the world and return a list of intersections.
  */
-int
+void
 initialtrace( raycaster_t *r, vector2d_t *dir )
 {
 	float highestgradient=0.0f,lowestgradient=0.0f;
@@ -816,7 +807,7 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 	while(0<1)
 	{
 		if(!current)
-			return NONE_FIRST;
+			return;
 		doneceil = donefloor = 0;
 		if(prevplat->ceilheight < current->platform->ceilheight)
 			ceilplat = prevplat;
@@ -854,7 +845,7 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 			checkceiling(r,ceilplat,(ceilplat->ceilheight-r->eyelevel)/current->distance,
 					&lowestgradient,&lowint,current,first);
 			if(checkdone(first,highestgradient,lowestgradient,highint,lowint))
-				return CEILING_FIRST;
+				return;
 		}
 		
 		if(floorplat == prevplat)
@@ -863,7 +854,7 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 			checkfloor(r,floorplat,(floorplat->floorheight-r->eyelevel)/current->distance,
 					&highestgradient,&highint,current,first);
 			if(checkdone(first,highestgradient,lowestgradient,highint,lowint))
-				return FLOOR_FIRST;
+				return;
 		}
 		
 		if(!doneceil)
@@ -871,14 +862,14 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 			checkceiling(r,ceilplat,(ceilplat->ceilheight-r->eyelevel)/current->distance,
 					&lowestgradient,&lowint,current,first);
 			if(checkdone(first&&!donefloor,highestgradient,lowestgradient,highint,lowint))
-				return CEILING_FIRST;
+				return;
 		}
 		if(!donefloor)
 		{
 			checkfloor(r,floorplat,(floorplat->floorheight-r->eyelevel)/current->distance,
 					&highestgradient,&highint,current,first);
 			if(checkdone(0,highestgradient,lowestgradient,highint,lowint))
-				return FLOOR_FIRST;
+				return;
 		}
 		
 		if(current->platform == &r->level.infplatform)
@@ -888,7 +879,7 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 			printf("map not closed hg=%f lg=%f\n",highestgradient,lowestgradient);
 			sleep(5);
 			
-			return -1;
+			return;
 		}
 		
 		prevplat = current->platform;
@@ -897,8 +888,8 @@ initialtrace( raycaster_t *r, vector2d_t *dir )
 		
 		first = 0;
 	}
-	printf("We went into infinity o_0\n");
-	return -1;
+	printf("We went into infinity\n");
+	return;
 }
 
 #define SCREEN_DISTANCE	1.0f
@@ -1010,10 +1001,7 @@ drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2, int x )
 	tpixel = &t->pixels[tx<<t->log2height];
 	for(y=p1;y<p2;y++)
 	{
-		if (*pixel != 0)
-			*pixel = SDL_MapRGB(r->screen->format, 0,255,0);
-		else
-			*pixel = tpixel[ty>>PRECISION_BITS];
+		*pixel = tpixel[ty>>PRECISION_BITS];
 
 		/* Recalculate the vertical texture pixel `ty`. Most of the time do this by
 		 * adding on a constant but periodically do an expensive recalculation. This is
@@ -1063,11 +1051,7 @@ drawfloor ( raycaster_t *r, platform_t *p, float h,
 		tx = (hdirx*invpixeltogradint[y]+ox)&(p->texture->widthmaskshift);
 		ty = (hdiry*invpixeltogradint[y]+oy)&(p->texture->heightmaskshift);
 		
-		if (*pixel != 0) {
-			*pixel = SDL_MapRGB(r->screen->format, 255,255,0);
-		} else {
-			*pixel = t->pixels[(ty>>DOUBLE_PRECISION_BITS)+((tx>>DOUBLE_PRECISION_BITS)<<t->log2height)];
-		}
+		*pixel = t->pixels[(ty>>DOUBLE_PRECISION_BITS)+((tx>>DOUBLE_PRECISION_BITS)<<t->log2height)];
 		
 		pixel += SCREEN_WIDTH;
 	}
@@ -1105,7 +1089,7 @@ static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
 	/* Go through the edges our view intersects with,
 	 * nearest to farthest.
 	 */
-	for(i=0;i<r->numintersections;i++)
+	for(i=0;i<r->numintersections && maxfloorgrad < minceilgrad;i++)
 	{
 		in = &r->intersections[i];
 
@@ -1122,8 +1106,8 @@ static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
 
 		/* Draw ceiling from prev platform to current platform. */
 		ceilgrad = (prevplat->ceilheight - r->eyelevel) / in->distance;
-		g2 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
-		g1 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
 		if (g2 < g1)
 		{
 			drawfloor(r, prevplat, prevplat->ceilheight - r->eyelevel, dir, g1, g2, x);
@@ -1144,8 +1128,8 @@ static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
 
 		/* Draw wall from prev ceiling to current ceiling. */
 		ceilgrad = (in->platform->ceilheight - r->eyelevel) / in->distance;
-		g2 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
-		g1 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g2 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
 		if (g2 < g1)
 		{
 			drawwall(r, in, g1, g2, x);
@@ -1154,117 +1138,6 @@ static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
 		prevceilgrad = ceilgrad;
 
 		prevplat = in->platform;
-	}
-}
-
-/* drawsurface
- *
- * This functions draws either the floor or the ceiling.
- * It determines which parts of the walls and floor need
- * to be drawn and calls the appropriate low-level drawing
- * functions, drawwall and drawfloor
- */
-
-void
-drawsurface ( raycaster_t *r, vector2d_t *dir, int surface, int x )
-{
-	float newgrad,grad,h;	/* h stands for height !! */
-	int i;
-	intersection_t *in;
-	platform_t *nearplat,*farplat;
-	vector2d_t temp,floorpoi;
-	
-	/* Start off by shooting a ray where we want to start drawing;
-	 * at the top or bottom of the screen
-	 */
-	if(surface == SURFACE_FLOOR)
-		grad = pixeltograd[SCREEN_HEIGHT-1];
-	else
-		grad = pixeltograd[0];
-	
-	/* Go through the edges our view intersects with,
-	 * nearest to farthest.
-	 */
-	for(i=0;i<r->numintersections;i++)
-	{
-		in = &r->intersections[i];
-		
-		/* Determine the height, h, at which we intersect this
-		 * edge
-		 */
-		h = r->eyelevel+grad*in->distance;
-
-		/* Make nearplat and farplat pointers to the near and far
-		 * platforms connected to the current edge
-		 */
-		if(in->edge->rightplat != in->platform)
-		{
-			nearplat = in->edge->rightplat;
-			farplat = in->edge->leftplat;
-		} else
-		{
-			nearplat = in->edge->leftplat;
-			farplat = in->edge->rightplat;
-		}
-					
-		if(surface == SURFACE_FLOOR)
-		{	
-			/* If we intersected the edge below the near platform
-			 * we must have intersected the near platform's floor
-			 */
-			if(h < nearplat->floorheight)
-			{
-				newgrad = (nearplat->floorheight-r->eyelevel)
-						/in->distance;
-				vectorscale(dir,(nearplat->floorheight-h)/grad,&temp);
-				vectoradd(&in->pos,&temp,&floorpoi);
-				
-				drawfloor(r,nearplat,nearplat->floorheight-r->eyelevel,
-						dir,newgrad,grad,x);
-				grad = newgrad;
-				h = nearplat->floorheight;
-			}
-			/* If we intersected the the edge below the far platform
-			 * we should draw the section of wall up to the top of 
-			 * of the platform
-			 */
-			if(h < farplat->floorheight)
-			{
-				newgrad = (farplat->floorheight-r->eyelevel)
-						/in->distance;
-				drawwall(r,in,newgrad,grad,x);
-				grad = newgrad;
-			}
-		} else
-		{
-			if(h > nearplat->ceilheight)
-			{
-				newgrad = (nearplat->ceilheight-r->eyelevel)
-						/in->distance;
-				vectorscale(dir,(nearplat->ceilheight-h)/grad,&temp);
-				vectoradd(&in->pos,&temp,&floorpoi);
-				drawfloor(r,nearplat,nearplat->ceilheight-r->eyelevel,
-						dir,grad,newgrad,x);
-				grad = newgrad;
-				h = nearplat->ceilheight;
-			}
-			if(h > farplat->ceilheight)
-			{
-				newgrad = (farplat->ceilheight-r->eyelevel)
-						/in->distance;
-				drawwall(r,in,grad,newgrad,x);
-
-				grad = newgrad;
-			}
-
-		}
-
-		/* If we hit the platform flagged as final, stop drawing.
-		 */
-		if(surface == SURFACE_CEILING && (in->final&FINAL_CEILING))
-			break;
-		else if(surface == SURFACE_FLOOR && (in->final&FINAL_FLOOR))
-			break;
 	}
 }
 
@@ -1428,7 +1301,6 @@ drawscreen( raycaster_t *r )
 	screenrect.w=SCREEN_WIDTH;
 	screenrect.h=SCREEN_HEIGHT;
 	
-	SDL_FillRect(r->screen, NULL, 0);
 	drawscene(r);
 	SDL_UpdateRects(r->screen, 1, &screenrect);
 }
