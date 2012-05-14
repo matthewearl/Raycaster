@@ -981,11 +981,10 @@ propermodulo( int a, int b )
  * Draw a piece of a wall, between gradients g1 and g2
  */
 inline void
-drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2, 
-		int h1, int h2, int x )
+drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2, int x )
 {
 	unsigned short *pixel,*tpixel;
-	int p1,p2,y,tx,ty,i;
+	int p1,p2,y,tx,ty,i,h1,h2;
 	texture_t *t=in->edge->texture;
 	
 	p1 = gradtopixel(g1);
@@ -1011,7 +1010,10 @@ drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2,
 	tpixel = &t->pixels[tx<<t->log2height];
 	for(y=p1;y<p2;y++)
 	{
-		*pixel = tpixel[ty>>PRECISION_BITS];
+		if (*pixel != 0)
+			*pixel = SDL_MapRGB(r->screen->format, 0,255,0);
+		else
+			*pixel = tpixel[ty>>PRECISION_BITS];
 
 		/* Recalculate the vertical texture pixel `ty`. Most of the time do this by
 		 * adding on a constant but periodically do an expensive recalculation. This is
@@ -1032,7 +1034,7 @@ drawwall ( raycaster_t *r, intersection_t *in, float g1, float g2,
  *   it is required for correct texture mapping
  */
 inline void
-drawfloor ( raycaster_t *r, intersection_t *in, platform_t *p, float h,
+drawfloor ( raycaster_t *r, platform_t *p, float h,
 		vector2d_t *dir, float g1, float g2, int x )
 {
 	unsigned short *pixel;
@@ -1055,18 +1057,105 @@ drawfloor ( raycaster_t *r, intersection_t *in, platform_t *p, float h,
 	ox = ((int)r->viewpos.x)<<DOUBLE_PRECISION_BITS;
 	oy = ((int)r->viewpos.y)<<DOUBLE_PRECISION_BITS;
 	
-	t=in->platform->texture;
+	t=p->texture;
 	for(y=p1;y<p2;y++)
 	{
-		tx = (hdirx*invpixeltogradint[y]+ox)&(in->platform->texture->widthmaskshift);
-		ty = (hdiry*invpixeltogradint[y]+oy)&(in->platform->texture->heightmaskshift);
+		tx = (hdirx*invpixeltogradint[y]+ox)&(p->texture->widthmaskshift);
+		ty = (hdiry*invpixeltogradint[y]+oy)&(p->texture->heightmaskshift);
 		
-		*pixel = t->pixels[(ty>>DOUBLE_PRECISION_BITS)+((tx>>DOUBLE_PRECISION_BITS)<<t->log2height)];
+		if (*pixel != 0) {
+			*pixel = SDL_MapRGB(r->screen->format, 255,255,0);
+		} else {
+			*pixel = t->pixels[(ty>>DOUBLE_PRECISION_BITS)+((tx>>DOUBLE_PRECISION_BITS)<<t->log2height)];
+		}
 		
 		pixel += SCREEN_WIDTH;
 	}
 }
 
+static float clamp(float v, float low, float high)
+{
+	return v < low ? low : (v > high ? high : v);
+}
+
+static void drawwallsandfloor ( raycaster_t *r,  vector2d_t *dir, int x )
+{
+	int i;
+	intersection_t *in;
+	float floorgrad, ceilgrad;
+	float prevfloorgrad, prevceilgrad;
+	float maxfloorgrad, minceilgrad;
+	float g1,g2;
+	platform_t *prevplat;
+	
+	/* Step through the intersections rendering the ceiling and the floor
+     * from near to far. Keep track of the highest floor gradient and lowest
+     * ceiling gradient rendered so far and use this to prevent drawing over
+     * the nearer surfaces.
+     */
+
+	maxfloorgrad = pixeltograd[SCREEN_HEIGHT-1];    /* Highest floor gradient so far. */
+	minceilgrad = pixeltograd[0];                   /* Lowest ceiling gradient so far. */
+
+	prevfloorgrad = -INFINITY;
+	prevceilgrad = +INFINITY;
+
+	prevplat = r->currentplatform;
+
+	/* Go through the edges our view intersects with,
+	 * nearest to farthest.
+	 */
+	for(i=0;i<r->numintersections;i++)
+	{
+		in = &r->intersections[i];
+
+		/* Draw floor from prev platform to current platform. */
+		floorgrad = (prevplat->floorheight - r->eyelevel) / in->distance;
+		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawfloor(r, prevplat, prevplat->floorheight - r->eyelevel, dir, g1, g2, x);
+			maxfloorgrad = g1;
+		}
+		prevfloorgrad = floorgrad;
+
+		/* Draw ceiling from prev platform to current platform. */
+		ceilgrad = (prevplat->ceilheight - r->eyelevel) / in->distance;
+		g2 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawfloor(r, prevplat, prevplat->ceilheight - r->eyelevel, dir, g1, g2, x);
+			minceilgrad = g2;
+		}
+		prevceilgrad = ceilgrad;
+
+		/* Draw wall from prev floor to current floor. */
+		floorgrad = (in->platform->floorheight - r->eyelevel) / in->distance;
+		g2 = clamp(prevfloorgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(floorgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawwall(r, in, g1, g2, x);
+			maxfloorgrad = g1;
+		}
+		prevfloorgrad = floorgrad;
+
+		/* Draw wall from prev ceiling to current ceiling. */
+		ceilgrad = (in->platform->ceilheight - r->eyelevel) / in->distance;
+		g2 = clamp(prevceilgrad, maxfloorgrad, minceilgrad);
+		g1 = clamp(ceilgrad, maxfloorgrad, minceilgrad);
+		if (g2 < g1)
+		{
+			drawwall(r, in, g1, g2, x);
+			minceilgrad = g2;
+		}
+		prevceilgrad = ceilgrad;
+
+		prevplat = in->platform;
+	}
+}
 
 /* drawsurface
  *
@@ -1130,7 +1219,7 @@ drawsurface ( raycaster_t *r, vector2d_t *dir, int surface, int x )
 				vectorscale(dir,(nearplat->floorheight-h)/grad,&temp);
 				vectoradd(&in->pos,&temp,&floorpoi);
 				
-				drawfloor(r,in,nearplat,nearplat->floorheight-r->eyelevel,
+				drawfloor(r,nearplat,nearplat->floorheight-r->eyelevel,
 						dir,newgrad,grad,x);
 				grad = newgrad;
 				h = nearplat->floorheight;
@@ -1143,8 +1232,7 @@ drawsurface ( raycaster_t *r, vector2d_t *dir, int surface, int x )
 			{
 				newgrad = (farplat->floorheight-r->eyelevel)
 						/in->distance;
-				drawwall(r,in,newgrad,grad,
-						(int)farplat->floorheight,(int)h,x);
+				drawwall(r,in,newgrad,grad,x);
 				grad = newgrad;
 			}
 		} else
@@ -1155,7 +1243,7 @@ drawsurface ( raycaster_t *r, vector2d_t *dir, int surface, int x )
 						/in->distance;
 				vectorscale(dir,(nearplat->ceilheight-h)/grad,&temp);
 				vectoradd(&in->pos,&temp,&floorpoi);
-				drawfloor(r,in,nearplat,nearplat->ceilheight-r->eyelevel,
+				drawfloor(r,nearplat,nearplat->ceilheight-r->eyelevel,
 						dir,grad,newgrad,x);
 				grad = newgrad;
 				h = nearplat->ceilheight;
@@ -1164,8 +1252,7 @@ drawsurface ( raycaster_t *r, vector2d_t *dir, int surface, int x )
 			{
 				newgrad = (farplat->ceilheight-r->eyelevel)
 						/in->distance;
-				drawwall(r,in,grad,newgrad,h,
-						farplat->ceilheight,x);
+				drawwall(r,in,grad,newgrad,x);
 
 				grad = newgrad;
 			}
@@ -1261,17 +1348,8 @@ drawsprites( raycaster_t *r, vector2d_t *dir, int x )
 void
 drawcolumn ( raycaster_t *r, vector2d_t *dir, int x )
 {
-	int ret;
-	ret = initialtrace(r,dir);
-	if(ret == CEILING_FIRST)
-	{
-		drawsurface(r,dir,SURFACE_CEILING,x);
-		drawsurface(r,dir,SURFACE_FLOOR,x);
-	} else if (ret == FLOOR_FIRST)
-	{
-		drawsurface(r,dir,SURFACE_FLOOR,x);
-		drawsurface(r,dir,SURFACE_CEILING,x);
-	} 
+	initialtrace(r,dir);
+	drawwallsandfloor(r, dir, x);
 	drawsprites(r,dir,x);
 	return;	
 }
@@ -1350,8 +1428,8 @@ drawscreen( raycaster_t *r )
 	screenrect.w=SCREEN_WIDTH;
 	screenrect.h=SCREEN_HEIGHT;
 	
+	SDL_FillRect(r->screen, NULL, 0);
 	drawscene(r);
-	
 	SDL_UpdateRects(r->screen, 1, &screenrect);
 }
 
