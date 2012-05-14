@@ -1169,7 +1169,9 @@ perframe ( raycaster_t *r, world_t *w )
 
 	if(current > r->lastfpsreporttime + MIN_FPS_POLL_TIME)
 	{
-		printf("FPS: %f\n", (float)(1000.0f * r->framessincelastreport)/(float)(current - r->lastfpsreporttime));
+		printf("FPS: %f (%f ms per frame)\n",
+			(float)(1000.0f * r->framessincelastreport)/(float)(current - r->lastfpsreporttime),
+			(float)(current - r->lastfpsreporttime)/(float)r->framessincelastreport);
 
 		r->framessincelastreport = 0;
 		r->lastfpsreporttime = current;
