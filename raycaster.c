@@ -27,8 +27,10 @@
 #include "physics.h"
 #include "tga.h"
 
-#define SCREEN_WIDTH	640
-#define SCREEN_HEIGHT	480
+#define SCREEN_WIDTH	1024
+#define SCREEN_HEIGHT	768
+
+#define DEFAULT_LEVEL	"levels/out.lvl"
 
 #define PACKED	__attribute__((packed))
 
@@ -1677,17 +1679,17 @@ renderloop( raycaster_t *r, world_t *w )
 int
 main ( int argc, char **argv )
 {
+	char *level;
 	raycaster_t r;
 	world_t w;
 
 	printf("Copyright Notice: This program is licensed under the GNU General Public License\nSee COPYING for details\n\n");
 
-	if(argc < 2)
-	{
-		printf("Usage: raycaster level\n");
-		return 1;
-	}
-	initraycaster(&r,argv[1]);
+	if(argc >= 2)
+		level = argv[1];
+	else
+		level = DEFAULT_LEVEL;
+	initraycaster(&r,level);
 	initworld(&w,&r);
 	if(!addentity(&w, "type=spawn\\coords=384 384\\angle=0"))
 		return 0;
